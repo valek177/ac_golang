@@ -15,36 +15,37 @@ type UUID string
 type storage[T any] interface {
 	Store(T) UUID
 	Get(UUID) T
-	Find([]FindOperator) []T
+	Find([]FindOperator) []T // select
 }
 
 type Task struct {
-	uuid     UUID
-	status   string
-	request  []byte
-	response []byte
+	// TODO
 }
+
+const (
+	StatusProcessing = "processing"
+	StatusQueued     = "queued"
+	StatusDone       = "done"
+	StatusError      = "error"
+)
 
 type Scheduler struct {
-	st   storage[Task]
-	proc processor
-
-	taskQueue  chan Task
-	numWorkers int
+	// TODO
 }
 
-func NewScheduler(st storage[any], proc processor, numWorkers, queueSize int) *Scheduler {
+// TODO scheduler methods
+func NewScheduler(st storage[Task], proc processor, numWorkers, queueSize int) (*Scheduler, error) {
 	// TODO
-	return nil
+	return nil, nil
 }
 
 func (s *Scheduler) worker() {
 	// TODO
 }
 
-func (s *Scheduler) AddTask(request []byte) UUID {
+func (s *Scheduler) AddTask(request []byte) (UUID, error) {
 	// TODO
-	return ""
+	return "", nil
 }
 
 func (s *Scheduler) GetTask(uuid UUID) Task {
@@ -52,7 +53,6 @@ func (s *Scheduler) GetTask(uuid UUID) Task {
 	return Task{}
 }
 
-func newUUID() UUID {
+func (s *Scheduler) Close() {
 	// TODO
-	return ""
 }
