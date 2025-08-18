@@ -15,7 +15,7 @@ type UUID string
 type storage[T any] interface {
 	Store(T) UUID
 	Get(UUID) T
-	Find([]FindOperator) []T // select
+	Find([]FindOperator) []T
 }
 
 type Task struct {
