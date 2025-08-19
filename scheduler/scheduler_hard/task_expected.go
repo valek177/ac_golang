@@ -3,7 +3,9 @@ package scheduler
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
 	"slices"
+	"sync"
 )
 
 // Обработчик задач
@@ -37,7 +39,6 @@ type Task struct {
 const (
 	StatusProcessing = "processing"
 	StatusQueued     = "queued"
-	StatusReady      = "ready"
 	StatusDone       = "done"
 	StatusError      = "error"
 )
@@ -47,23 +48,45 @@ type Scheduler struct {
 	st   storage[Task]
 	proc processor
 
-	taskQueue  chan Task
-	numWorkers int
+	taskQueue chan Task
+
+	mu     sync.RWMutex
+	closed bool
+
+	closeDoneCh chan struct{}
 }
 
-func NewScheduler(st storage[Task], proc processor, numWorkers, queueSize int) *Scheduler {
+func NewScheduler(st storage[Task], proc processor, numWorkers, queueSize int) (*Scheduler, error) {
+	if numWorkers <= 0 {
+		return nil, fmt.Errorf("incorrect workers number")
+	}
+	if queueSize <= 0 {
+		return nil, fmt.Errorf("incorrect queue size")
+	}
+
 	scheduler := &Scheduler{
-		st:         st,
-		proc:       proc,
-		numWorkers: numWorkers,
-		taskQueue:  make(chan Task, queueSize),
+		st:          st,
+		proc:        proc,
+		taskQueue:   make(chan Task, queueSize),
+		closeDoneCh: make(chan struct{}),
 	}
 
-	for range numWorkers {
-		go scheduler.worker()
-	}
+	go func() {
+		wg := sync.WaitGroup{}
+		wg.Add(numWorkers)
 
-	return scheduler
+		for range numWorkers {
+			go func() {
+				defer wg.Done()
+				scheduler.worker()
+			}()
+		}
+
+		wg.Wait()
+		close(scheduler.closeDoneCh)
+	}()
+
+	return scheduler, nil
 }
 
 func (s *Scheduler) worker() {
@@ -85,7 +108,7 @@ func (s *Scheduler) worker() {
 	}
 }
 
-func (s *Scheduler) AddTask(request []byte) UUID {
+func (s *Scheduler) AddTask(request []byte) (UUID, error) {
 	t := Task{
 		uuid:    newUUID(),
 		status:  StatusQueued,
@@ -103,16 +126,24 @@ func (s *Scheduler) AddTask(request []byte) UUID {
 	if storageTasks := s.st.Find([]FindOperator{query}); storageTasks != nil {
 		for _, v := range storageTasks {
 			if slices.Equal(v.request, t.request) {
-				return v.uuid
+				return v.uuid, nil
 			}
 		}
 	}
 
-	go func() {
-		s.taskQueue <- t
-	}()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
-	return t.uuid
+	if s.closed {
+		return "", fmt.Errorf("scheduler pool is closed")
+	}
+
+	select {
+	case s.taskQueue <- t:
+		return t.uuid, nil
+	default:
+		return "", fmt.Errorf("scheduler pool is full")
+	}
 }
 
 func (s *Scheduler) GetTask(uuid UUID) Task {

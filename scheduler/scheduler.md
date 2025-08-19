@@ -39,13 +39,39 @@ type storage[T any] interface {
     Find([]FindOperator) []T // select 
 }
 
+type Task struct {
+    //TODO
+}
+
+const (
+	StatusProcessing = "processing"
+	StatusQueued     = "queued"
+	StatusDone       = "done"
+	StatusError      = "error"
+)
+
 type Scheduler struct {
     //TODO
 }
 
 //TODO scheduler methods
-```
+func NewScheduler(st storage[Task], proc processor, numWorkers, queueSize int) (*Scheduler, error) {
+    //TODO
+}
 
-Возможно добавить подразделы (раскрывающийся список):
-Подсказки?
-На подумать (какие вопросы может задать интервьюер, например "восстановление после сбоев")
+func (s *Scheduler) worker() {
+    //TODO
+}
+
+func (s *Scheduler) AddTask(request []byte) (UUID, error) {
+    //TODO
+}
+
+func (s *Scheduler) GetTask(uuid UUID) Task {
+    //TODO
+}
+
+func (s *Scheduler) Close() {
+    //TODO
+}
+```
