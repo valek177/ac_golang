@@ -46,9 +46,6 @@ type Scheduler struct {
 
 	taskQueue chan Task
 
-	mu     sync.RWMutex
-	closed bool
-
 	closeDoneCh chan struct{}
 }
 
@@ -71,7 +68,7 @@ func NewScheduler(st storage[Task], proc processor, numWorkers, queueSize int) (
 		wg := sync.WaitGroup{}
 		wg.Add(numWorkers)
 
-		for range numWorkers {
+		for i := 0; i < numWorkers; i++ {
 			go func() {
 				defer wg.Done()
 				scheduler.worker()
@@ -86,18 +83,18 @@ func NewScheduler(st storage[Task], proc processor, numWorkers, queueSize int) (
 }
 
 func (s *Scheduler) worker() {
-	var err error
-
 	for t := range s.taskQueue {
 		t.status = StatusProcessing
 
 		s.st.Store(t)
 
-		t.response, err = s.proc.Process(t.request)
+		response, err := s.proc.Process(t.request)
 		if err != nil {
 			t.status = StatusError
+			t.response = []byte{}
 		} else {
 			t.status = StatusDone
+			t.response = response
 		}
 
 		s.st.Store(t)
@@ -109,13 +106,6 @@ func (s *Scheduler) AddTask(request []byte) (UUID, error) {
 		uuid:    newUUID(),
 		status:  StatusQueued,
 		request: request,
-	}
-
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	if s.closed {
-		return "", fmt.Errorf("scheduler pool is closed")
 	}
 
 	select {
@@ -137,14 +127,6 @@ func (s *Scheduler) GetTask(uuid UUID) Task {
 }
 
 func (s *Scheduler) Close() {
-	if s.closed {
-		return
-	}
-
-	s.mu.Lock()
-	s.closed = true
-	s.mu.Unlock()
-
 	close(s.taskQueue)
 
 	<-s.closeDoneCh

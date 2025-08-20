@@ -1,4 +1,4 @@
-package scheduler
+package main
 
 import (
 	"crypto/sha256"
@@ -49,9 +49,6 @@ type Scheduler struct {
 	proc processor
 
 	taskQueue chan Task
-
-	mu     sync.RWMutex
-	closed bool
 
 	closeDoneCh chan struct{}
 }
@@ -129,13 +126,6 @@ func (s *Scheduler) AddTask(request []byte) (UUID, error) {
 				return v.uuid, nil
 			}
 		}
-	}
-
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	if s.closed {
-		return "", fmt.Errorf("scheduler pool is closed")
 	}
 
 	select {

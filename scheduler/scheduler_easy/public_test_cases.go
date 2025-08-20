@@ -8,19 +8,18 @@ type TestCase struct {
 var testCases = []TestCase{
 	// Публичные тесткейсы
 	{
-		name: "Check NewScheduler",
+		name: "Check NewScheduler is OK with valid parameters",
 		check: func() bool {
-			scheduler := NewScheduler(makeStorage(), makeProcessor(), 5, 1)
+			scheduler, err := NewScheduler(makeStorage(), makeProcessor(), 5, 1)
+			if err != nil {
+				return false
+			}
 
 			if scheduler.st == nil {
 				return false
 			}
 
 			if scheduler.proc == nil {
-				return false
-			}
-
-			if scheduler.numWorkers == 0 {
 				return false
 			}
 
@@ -32,9 +31,56 @@ var testCases = []TestCase{
 		},
 	},
 	{
-		name: "Check GetTask",
+		name: "Check NewScheduler is FAILED with incorrect numWorkers (0)",
 		check: func() bool {
-			scheduler := NewScheduler(makeStorage(), makeProcessor(), 5, 1)
+			_, err := NewScheduler(makeStorage(), makeProcessor(), 0, 1)
+			if err == nil {
+				return false
+			}
+
+			return true
+		},
+	},
+	{
+		name: "Check NewScheduler is FAILED with incorrect numWorkers (<0)",
+		check: func() bool {
+			_, err := NewScheduler(makeStorage(), makeProcessor(), -1, 1)
+			if err == nil {
+				return false
+			}
+
+			return true
+		},
+	},
+	{
+		name: "Check NewScheduler is FAILED with incorrect queueSize (0)",
+		check: func() bool {
+			_, err := NewScheduler(makeStorage(), makeProcessor(), 2, 0)
+			if err == nil {
+				return false
+			}
+
+			return true
+		},
+	},
+	{
+		name: "Check NewScheduler is FAILED with incorrect queueSize (<0)",
+		check: func() bool {
+			_, err := NewScheduler(makeStorage(), makeProcessor(), 2, -1)
+			if err == nil {
+				return false
+			}
+
+			return true
+		},
+	},
+	{
+		name: "Check GetTask returns not empty task",
+		check: func() bool {
+			scheduler, err := NewScheduler(makeStorage(), makeProcessor(), 5, 1)
+			if err != nil {
+				return false
+			}
 
 			task := scheduler.GetTask("123")
 
@@ -46,16 +92,84 @@ var testCases = []TestCase{
 		},
 	},
 	{
-		name: "Check AddTask",
+		name: "Check AddTask is OK",
 		check: func() bool {
-			scheduler := NewScheduler(makeStorage(), makeProcessor(), 5, 1)
+			scheduler, err := NewScheduler(makeStorage(), makeProcessor(), 5, 1)
+			if err != nil {
+				return false
+			}
 
-			scheduler.AddTask([]byte{1})
-			// todo
+			uuid, err := scheduler.AddTask([]byte{1})
+			if uuid == "" {
+				return false
+			}
+
+			return !scheduler.isEmptyTaskQueue()
+		},
+	},
+	{
+		name: "Check AddTask is not OK (pool is full)",
+		check: func() bool {
+			scheduler, err := NewScheduler(makeStorage(), makeProcessor(), 5, 1)
+			if err != nil {
+				return false
+			}
+
+			uuid, err := scheduler.AddTask([]byte{1})
+			if uuid == "" {
+				return false
+			}
+
+			uuid, err = scheduler.AddTask([]byte{2})
+			if err == nil || uuid != "" {
+				return false
+			}
 
 			return true
 		},
 	},
+	{
+		name: "Check Close is OK",
+		check: func() bool {
+			scheduler, err := NewScheduler(makeStorage(), makeProcessor(), 5, 1)
+			if err != nil {
+				return false
+			}
+
+			scheduler.Close()
+
+			// will occure panic: send on closed channel
+			// uuid, err := scheduler.AddTask([]byte{1})
+			// if err == nil || uuid != "" {
+			// 	return false
+			// }
+
+			return scheduler.isClosed()
+		},
+	},
+}
+
+// -----------------------
+// For testing only
+func (s *Scheduler) isClosed() bool {
+	select {
+	case _, opened := <-s.closeDoneCh:
+		if !opened {
+			return true
+		}
+		return false
+	default:
+		return false
+	}
+}
+
+func (s *Scheduler) isEmptyTaskQueue() bool {
+	select {
+	case <-s.taskQueue:
+		return false
+	default:
+		return true
+	}
 }
 
 // mockers
