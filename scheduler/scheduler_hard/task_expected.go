@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
@@ -49,8 +50,6 @@ type Scheduler struct {
 	proc processor
 
 	taskQueue chan Task
-
-	closeDoneCh chan struct{}
 }
 
 func NewScheduler(st storage[Task], proc processor, numWorkers, queueSize int) (*Scheduler, error) {
@@ -62,17 +61,16 @@ func NewScheduler(st storage[Task], proc processor, numWorkers, queueSize int) (
 	}
 
 	scheduler := &Scheduler{
-		st:          st,
-		proc:        proc,
-		taskQueue:   make(chan Task, queueSize),
-		closeDoneCh: make(chan struct{}),
+		st:        st,
+		proc:      proc,
+		taskQueue: make(chan Task, queueSize),
 	}
 
 	go func() {
 		wg := sync.WaitGroup{}
 		wg.Add(numWorkers)
 
-		for range numWorkers {
+		for i := 0; i < numWorkers; i++ {
 			go func() {
 				defer wg.Done()
 				scheduler.worker()
@@ -80,25 +78,24 @@ func NewScheduler(st storage[Task], proc processor, numWorkers, queueSize int) (
 		}
 
 		wg.Wait()
-		close(scheduler.closeDoneCh)
 	}()
 
 	return scheduler, nil
 }
 
 func (s *Scheduler) worker() {
-	var err error
-
 	for t := range s.taskQueue {
 		t.status = StatusProcessing
 
 		s.st.Store(t)
 
-		t.response, err = s.proc.Process(t.request)
+		response, err := s.proc.Process(t.request)
 		if err != nil {
 			t.status = StatusError
+			t.response = nil
 		} else {
 			t.status = StatusDone
+			t.response = response
 		}
 
 		s.st.Store(t)
@@ -137,18 +134,25 @@ func (s *Scheduler) AddTask(request []byte) (UUID, error) {
 }
 
 func (s *Scheduler) GetTask(uuid UUID) Task {
-	task := s.st.Get(uuid)
+	return s.st.Get(uuid)
+}
 
-	if task.uuid == "" {
-		return Task{}
-	}
-
-	return task
+func (s *Scheduler) Close() {
+	close(s.taskQueue)
 }
 
 // Генератор UUID
 func newUUID() UUID {
-	return "d97976cc-35f8-44cb-91f9-fa47a85db34b"
+	// pseudo uuid
+	b := make([]byte, 16)
+	_, err := rand.Read(b)
+	if err != nil {
+		return "d97976cc-35f8-44cb-91f9-fa47a85db34b"
+	}
+
+	uuid := fmt.Sprintf("%X-%X-%X-%X-%X", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
+
+	return UUID(uuid)
 }
 
 func generateHash(request []byte) string {

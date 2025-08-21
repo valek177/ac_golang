@@ -99,6 +99,7 @@ var testCases = []TestCase{
 	{
 		name: "Check AddTask is OK",
 		check: func() bool {
+			// TODO fix
 			scheduler, err := NewScheduler(makeStorage(), makeProcessor(), 1, 1)
 			if err != nil {
 				return false
@@ -110,6 +111,58 @@ var testCases = []TestCase{
 			}
 
 			return !scheduler.isEmptyTaskQueue()
+		},
+	},
+	{
+		name: "Check AddTask is OK (different tasks, without exceeding the queue size)",
+		check: func() bool {
+			// TODO fix
+			scheduler, err := NewScheduler(makeStorage(), makeProcessor(), 1, 3)
+			if err != nil {
+				return false
+			}
+
+			uuid, err := scheduler.AddTask([]byte{1})
+			if uuid == "" {
+				return false
+			}
+
+			uuid, err = scheduler.AddTask([]byte{2})
+			if uuid == "" {
+				return false
+			}
+
+			uuid, err = scheduler.AddTask([]byte{3})
+			if uuid == "" {
+				return false
+			}
+
+			return !scheduler.isEmptyTaskQueue()
+		},
+	},
+	{
+		name: "Check AddTask is OK (task with hash & bytes already exists)",
+		check: func() bool {
+			scheduler, err := NewScheduler(makeStorage(), makeProcessor(), 1, 1)
+			if err != nil {
+				return false
+			}
+
+			checkUuid := newUUID()
+
+			scheduler.st.Store(Task{
+				uuid:    checkUuid,
+				request: []byte{1},
+				hash:    generateHash([]byte{1}),
+			})
+
+			// Добавляем ту же таску, должны вернуть тот же UUID, что у таски в storage
+			uuid, err := scheduler.AddTask([]byte{1})
+			if uuid != checkUuid || err != nil {
+				return false
+			}
+
+			return true
 		},
 	},
 	{
@@ -290,8 +343,18 @@ func (m *mockstorage[any]) Get(uuid UUID) Task {
 	return val
 }
 
-func (m *mockstorage[any]) Find([]FindOperator) []Task {
-	return nil
+func (m *mockstorage[any]) Find(operators []FindOperator) []Task {
+	foundedTasks := []Task{}
+
+	for _, oper := range operators {
+		for _, v := range m.tasks {
+			if v.hash == oper.value {
+				foundedTasks = append(foundedTasks, v)
+			}
+		}
+	}
+
+	return foundedTasks
 }
 
 func NewMockStorage() MockStorage[any] {
