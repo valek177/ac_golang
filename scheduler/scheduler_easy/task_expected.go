@@ -45,8 +45,6 @@ type Scheduler struct {
 	proc processor
 
 	taskQueue chan Task
-
-	closeDoneCh chan struct{}
 }
 
 func NewScheduler(st storage[Task], proc processor, numWorkers, queueSize int) (*Scheduler, error) {
@@ -58,10 +56,9 @@ func NewScheduler(st storage[Task], proc processor, numWorkers, queueSize int) (
 	}
 
 	scheduler := &Scheduler{
-		st:          st,
-		proc:        proc,
-		taskQueue:   make(chan Task, queueSize),
-		closeDoneCh: make(chan struct{}),
+		st:        st,
+		proc:      proc,
+		taskQueue: make(chan Task, queueSize),
 	}
 
 	go func() {
@@ -71,18 +68,17 @@ func NewScheduler(st storage[Task], proc processor, numWorkers, queueSize int) (
 		for i := 0; i < numWorkers; i++ {
 			go func() {
 				defer wg.Done()
-				scheduler.worker()
+				scheduler.worker(i)
 			}()
 		}
 
 		wg.Wait()
-		close(scheduler.closeDoneCh)
 	}()
 
 	return scheduler, nil
 }
 
-func (s *Scheduler) worker() {
+func (s *Scheduler) worker(id int) {
 	for t := range s.taskQueue {
 		t.status = StatusProcessing
 
@@ -91,7 +87,7 @@ func (s *Scheduler) worker() {
 		response, err := s.proc.Process(t.request)
 		if err != nil {
 			t.status = StatusError
-			t.response = []byte{}
+			t.response = nil
 		} else {
 			t.status = StatusDone
 			t.response = response
@@ -117,19 +113,11 @@ func (s *Scheduler) AddTask(request []byte) (UUID, error) {
 }
 
 func (s *Scheduler) GetTask(uuid UUID) Task {
-	task := s.st.Get(uuid)
-
-	if task.uuid == "" {
-		return Task{}
-	}
-
-	return task
+	return s.st.Get(uuid)
 }
 
 func (s *Scheduler) Close() {
 	close(s.taskQueue)
-
-	<-s.closeDoneCh
 }
 
 // Генератор UUID
