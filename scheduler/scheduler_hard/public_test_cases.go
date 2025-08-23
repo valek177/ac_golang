@@ -14,205 +14,22 @@ type TestCase struct {
 var testCases = []TestCase{
 	// Публичные тесткейсы
 	{
-		name: "Check NewScheduler is OK with valid parameters",
+		name: "Вызов NewScheduler, добавление задачи, получение этой же задачи, проверка статуса задачи",
 		check: func() bool {
-			scheduler, err := NewScheduler(makeStorage(), makeProcessor(), 2, 1)
-			if err != nil {
-				return false
-			}
-
-			if scheduler.st == nil {
-				return false
-			}
-
-			if scheduler.proc == nil {
-				return false
-			}
-
-			if scheduler.taskQueue == nil {
-				return false
-			}
-
-			return true
-		},
-	},
-	{
-		name: "Check NewScheduler is FAILED with incorrect numWorkers (0)",
-		check: func() bool {
-			_, err := NewScheduler(makeStorage(), makeProcessor(), 0, 1)
-			if err == nil {
-				return false
-			}
-
-			return true
-		},
-	},
-	{
-		name: "Check NewScheduler is FAILED with incorrect numWorkers (<0)",
-		check: func() bool {
-			_, err := NewScheduler(makeStorage(), makeProcessor(), -1, 1)
-			if err == nil {
-				return false
-			}
-
-			return true
-		},
-	},
-	{
-		name: "Check NewScheduler is FAILED with incorrect queueSize (0)",
-		check: func() bool {
-			_, err := NewScheduler(makeStorage(), makeProcessor(), 2, 0)
-			if err == nil {
-				return false
-			}
-
-			return true
-		},
-	},
-	{
-		name: "Check NewScheduler is FAILED with incorrect queueSize (<0)",
-		check: func() bool {
-			_, err := NewScheduler(makeStorage(), makeProcessor(), 2, -1)
-			if err == nil {
-				return false
-			}
-
-			return true
-		},
-	},
-	{
-		name: "Check GetTask returns not empty task",
-		check: func() bool {
-			scheduler, err := NewScheduler(makeStorage(), makeProcessor(), 1, 1)
+			scheduler, err := NewScheduler(makeRepository(), makeProcessor(), 1, 1,
+				generateUUID, generateHash)
 			if err != nil {
 				return false
 			}
 
 			uuid, err := scheduler.AddTask([]byte{1})
-			if uuid == "" {
-				return false
-			}
-
-			return true
-		},
-	},
-	{
-		name: "Check AddTask is OK",
-		check: func() bool {
-			// TODO fix
-			scheduler, err := NewScheduler(makeStorage(), makeProcessor(), 1, 1)
-			if err != nil {
-				return false
-			}
-
-			uuid, err := scheduler.AddTask([]byte{1})
-			if uuid == "" {
-				return false
-			}
-
-			return !scheduler.isEmptyTaskQueue()
-		},
-	},
-	{
-		name: "Check AddTask is OK (different tasks, without exceeding the queue size)",
-		check: func() bool {
-			// TODO fix
-			scheduler, err := NewScheduler(makeStorage(), makeProcessor(), 1, 3)
-			if err != nil {
-				return false
-			}
-
-			uuid, err := scheduler.AddTask([]byte{1})
-			if uuid == "" {
-				return false
-			}
-
-			uuid, err = scheduler.AddTask([]byte{2})
-			if uuid == "" {
-				return false
-			}
-
-			uuid, err = scheduler.AddTask([]byte{3})
-			if uuid == "" {
-				return false
-			}
-
-			return !scheduler.isEmptyTaskQueue()
-		},
-	},
-	{
-		name: "Check AddTask is OK (task with hash & bytes already exists)",
-		check: func() bool {
-			scheduler, err := NewScheduler(makeStorage(), makeProcessor(), 1, 1)
-			if err != nil {
-				return false
-			}
-
-			checkUuid := newUUID()
-
-			scheduler.st.Store(Task{
-				uuid:    checkUuid,
-				request: []byte{1},
-				hash:    generateHash([]byte{1}),
-			})
-
-			// Добавляем ту же таску, должны вернуть тот же UUID, что у таски в storage
-			uuid, err := scheduler.AddTask([]byte{1})
-			if uuid != checkUuid || err != nil {
-				return false
-			}
-
-			return true
-		},
-	},
-	{
-		name: "Check AddTask is not OK (pool is full)",
-		check: func() bool {
-			scheduler, err := NewScheduler(makeStorage(), makeProcessor(), 1, 1)
-			if err != nil {
-				return false
-			}
-
-			uuid, err := scheduler.AddTask([]byte{1})
-			if uuid == "" {
-				return false
-			}
-
-			uuid, err = scheduler.AddTask([]byte{2})
-			if err == nil || uuid != "" {
-				return false
-			}
-
-			return true
-		},
-	},
-	{
-		name: "Check Close is OK",
-		check: func() bool {
-			scheduler, err := NewScheduler(makeStorage(), makeProcessor(), 1, 1)
 			if err != nil {
 				return false
 			}
 
 			scheduler.Close()
 
-			return scheduler.isClosed()
-		},
-	},
-	{
-		name: "Check worker is OK (task is done)",
-		check: func() bool {
-			scheduler, err := NewScheduler(makeStorage(), makeProcessor(), 1, 1)
-			if err != nil {
-				return false
-			}
-
-			uuid, err := scheduler.AddTask([]byte{1})
-			if err != nil {
-				return false
-			}
-
-			// чтобы успел выполниться worker в горутине
+			// ждем когда таска обработается, иначе не успеет попасть в repository
 			time.Sleep(time.Second)
 
 			task := scheduler.GetTask(uuid)
@@ -232,9 +49,10 @@ var testCases = []TestCase{
 		},
 	},
 	{
-		name: "Check worker is OK (processing task error)",
+		name: "Проверка работы worker (возврат ошибки при выполнении задачи)",
 		check: func() bool {
-			scheduler, err := NewScheduler(makeStorage(), makeProcessor(), 1, 1)
+			scheduler, err := NewScheduler(makeRepository(), makeProcessor(), 1, 1,
+				generateUUID, generateHash)
 			if err != nil {
 				return false
 			}
@@ -244,7 +62,8 @@ var testCases = []TestCase{
 				return false
 			}
 
-			// чтобы успел выполниться worker в горутине
+			scheduler.Close()
+			// ждем когда таска обработается, иначе не успеет попасть в repository
 			time.Sleep(time.Second)
 
 			task := scheduler.GetTask(uuid)
@@ -255,6 +74,86 @@ var testCases = []TestCase{
 				return false
 			}
 			if task.response != nil {
+				return false
+			}
+
+			return true
+		},
+	},
+	{
+		name: "Вызов NewScheduler, проверка коллизии задач (одинаковый хэш)",
+		check: func() bool {
+			scheduler, err := NewScheduler(makeRepository(), makeProcessor(), 1, 2,
+				generateUUID, generateHash)
+			if err != nil {
+				return false
+			}
+
+			checkUuid, err := scheduler.AddTask([]byte{1})
+			if err != nil {
+				return false
+			}
+
+			// ждем когда таска обработается, иначе не успеет попасть в repository
+			time.Sleep(time.Second)
+
+			// Добавляем ту же таску, должны вернуть тот же UUID, что у таски в repository
+			uuid, err := scheduler.AddTask([]byte{1})
+			if uuid != checkUuid || err != nil {
+				return false
+			}
+			scheduler.Close()
+
+			return true
+		},
+	},
+	{
+		name: "Вызов NewScheduler, без коллизий задач",
+		check: func() bool {
+			scheduler, err := NewScheduler(makeRepository(), makeProcessor(), 1, 2,
+				generateUUID, generateHash)
+			if err != nil {
+				return false
+			}
+
+			uuid, err := scheduler.AddTask([]byte{1})
+			if err != nil {
+				return false
+			}
+
+			uuid2, err := scheduler.AddTask([]byte{2})
+			if err != nil {
+				return false
+			}
+
+			scheduler.Close()
+
+			// ждем когда таска обработается, иначе не успеет попасть в repository
+			time.Sleep(time.Second)
+
+			task := scheduler.GetTask(uuid)
+			if task.uuid == "" {
+				return false
+			}
+
+			if !slices.Equal([]byte{1}, task.response) {
+				return false
+			}
+
+			if task.status != StatusDone {
+				return false
+			}
+
+			task2 := scheduler.GetTask(uuid2)
+			if task2.uuid == "" {
+				return false
+			}
+
+			if !slices.Equal([]byte{2}, task2.response) {
+				return false
+			}
+
+			if task2.status != StatusDone {
 				return false
 			}
 
@@ -311,28 +210,40 @@ func NewMockProcessor() MockProcessor {
 	return &mockprocessor{}
 }
 
-func makeProcessor() processor {
+func makeProcessor() Processor {
 	return NewMockProcessor()
 }
 
-// Mock Storage
+// Mock Repository
 
-type MockStorage[T any] interface {
+type MockRepository interface {
 	Store(Task) UUID
-	Get(UUID) Task
-	Find([]FindOperator) []Task
+	GetByUUID(UUID) Task
+	GetByHash(hash Hash) []Task
 }
 
-type mockstorage[T any] struct {
+type mockrepository struct {
 	tasks map[UUID]Task
 }
 
-func (m *mockstorage[any]) Store(t Task) UUID {
+func (m *mockrepository) Store(t Task) UUID {
 	m.tasks[t.uuid] = t
 	return t.uuid
 }
 
-func (m *mockstorage[any]) Get(uuid UUID) Task {
+func (m *mockrepository) GetByHash(hash Hash) []Task {
+	foundedTasks := []Task{}
+
+	for _, v := range m.tasks {
+		if v.hash == hash {
+			foundedTasks = append(foundedTasks, v)
+		}
+	}
+
+	return foundedTasks
+}
+
+func (m *mockrepository) GetByUUID(uuid UUID) Task {
 	if uuid == "" {
 		return Task{}
 	}
@@ -343,26 +254,12 @@ func (m *mockstorage[any]) Get(uuid UUID) Task {
 	return val
 }
 
-func (m *mockstorage[any]) Find(operators []FindOperator) []Task {
-	foundedTasks := []Task{}
-
-	for _, oper := range operators {
-		for _, v := range m.tasks {
-			if v.hash == oper.value {
-				foundedTasks = append(foundedTasks, v)
-			}
-		}
-	}
-
-	return foundedTasks
-}
-
-func NewMockStorage() MockStorage[any] {
-	return &mockstorage[any]{
+func NewMockRepository() MockRepository {
+	return &mockrepository{
 		tasks: make(map[UUID]Task),
 	}
 }
 
-func makeStorage() storage[Task] {
-	return NewMockStorage()
+func makeRepository() Repository {
+	return NewMockRepository()
 }

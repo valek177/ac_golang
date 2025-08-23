@@ -2,20 +2,26 @@
 
 package main
 
-type processor interface {
+import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"fmt"
+)
+
+type Processor interface {
 	Process([]byte) ([]byte, error)
 }
 
-type FindOperator struct {
-	key, operator, value string
-}
+type (
+	UUID string
+	Hash string
+)
 
-type UUID string
-
-type storage[T any] interface {
-	Store(T) UUID
-	Get(UUID) T
-	Find([]FindOperator) []T
+type Repository interface {
+	Store(Task) UUID
+	GetByUUID(UUID) Task
+	GetByHash(hash Hash) []Task
 }
 
 type Task struct {
@@ -34,7 +40,7 @@ type Scheduler struct {
 }
 
 // TODO scheduler methods
-func NewScheduler(st storage[Task], proc processor, numWorkers, queueSize int) (*Scheduler, error) {
+func NewScheduler(repository Repository, processor Processor, numWorkers, queueSize int, generateUUID func() UUID, generateHash func(request []byte) Hash) (*Scheduler, error) {
 	// TODO
 	return nil, nil
 }
@@ -55,4 +61,27 @@ func (s *Scheduler) GetTask(uuid UUID) Task {
 
 func (s *Scheduler) Close() {
 	// TODO
+}
+
+// Для генерации UUID можно использовать готовую функцию
+func generateUUID() UUID {
+	// pseudo uuid
+	b := make([]byte, 16)
+	_, err := rand.Read(b)
+	if err != nil {
+		return ""
+	}
+
+	uuid := fmt.Sprintf("%X-%X-%X-%X-%X", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
+
+	return UUID(uuid)
+}
+
+// Для генерации хэша можно использовать готовую функцию
+func generateHash(request []byte) Hash {
+	h := sha256.New()
+
+	h.Write(request)
+
+	return Hash(base64.URLEncoding.EncodeToString(h.Sum(nil)))
 }

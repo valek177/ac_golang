@@ -9,32 +9,27 @@ import (
 	"sync"
 )
 
-// Обработчик задач
-type processor interface {
+type Processor interface {
 	Process([]byte) ([]byte, error)
 }
 
-// Для хранилища
-type FindOperator struct {
-	key, operator, value string
+type (
+	UUID string
+	Hash string
+)
+
+type Repository interface {
+	Store(Task) UUID
+	GetByUUID(UUID) Task
+	GetByHash(hash Hash) []Task
 }
 
-type UUID string
-
-// Интерфейс хранилища (БД)
-type storage[T any] interface {
-	Store(T) UUID
-	Get(UUID) T
-	Find([]FindOperator) []T
-}
-
-// TODO для К.
 type Task struct {
 	uuid     UUID
 	status   string
 	request  []byte
 	response []byte
-	hash     string
+	hash     Hash
 }
 
 const (
@@ -44,110 +39,101 @@ const (
 	StatusError      = "error"
 )
 
-// TODO для К.
 type Scheduler struct {
-	st   storage[Task]
-	proc processor
+	repository Repository
+	processor  Processor
+
+	wg sync.WaitGroup
+
+	generateUUID func() UUID
+	generateHash func(request []byte) Hash
 
 	taskQueue chan Task
 }
 
-func NewScheduler(st storage[Task], proc processor, numWorkers, queueSize int) (*Scheduler, error) {
-	if numWorkers <= 0 {
-		return nil, fmt.Errorf("incorrect workers number")
-	}
-	if queueSize <= 0 {
-		return nil, fmt.Errorf("incorrect queue size")
-	}
-
+func NewScheduler(repository Repository, processor Processor, numWorkers, queueSize int,
+	generateUUID func() UUID, generateHash func(request []byte) Hash,
+) (*Scheduler, error) {
 	scheduler := &Scheduler{
-		st:        st,
-		proc:      proc,
-		taskQueue: make(chan Task, queueSize),
+		repository:   repository,
+		processor:    processor,
+		taskQueue:    make(chan Task, queueSize),
+		generateUUID: generateUUID,
+		generateHash: generateHash,
 	}
 
-	go func() {
-		wg := sync.WaitGroup{}
-		wg.Add(numWorkers)
+	scheduler.wg.Add(numWorkers)
 
-		for i := 0; i < numWorkers; i++ {
-			go func() {
-				defer wg.Done()
-				scheduler.worker()
-			}()
-		}
-
-		wg.Wait()
-	}()
+	for range numWorkers {
+		go func() {
+			defer scheduler.wg.Done()
+			scheduler.worker()
+		}()
+	}
 
 	return scheduler, nil
 }
 
 func (s *Scheduler) worker() {
-	for t := range s.taskQueue {
-		t.status = StatusProcessing
+	for task := range s.taskQueue {
+		task.status = StatusProcessing
 
-		s.st.Store(t)
+		s.repository.Store(task)
 
-		response, err := s.proc.Process(t.request)
+		response, err := s.processor.Process(task.request)
 		if err != nil {
-			t.status = StatusError
-			t.response = nil
+			task.status = StatusError
+			task.response = nil
 		} else {
-			t.status = StatusDone
-			t.response = response
+			task.status = StatusDone
+			task.response = response
 		}
 
-		s.st.Store(t)
+		s.repository.Store(task)
 	}
 }
 
 func (s *Scheduler) AddTask(request []byte) (UUID, error) {
-	t := Task{
-		uuid:    newUUID(),
+	task := Task{
+		uuid:    s.generateUUID(),
 		status:  StatusQueued,
 		request: request,
-		hash:    generateHash(request),
-	}
-
-	query := FindOperator{
-		key:      "hash",
-		operator: "equals",
-		value:    t.hash,
+		hash:    s.generateHash(request),
 	}
 
 	// Не добавляем таску, если уже есть таска с таким hash & bytes
-	if storageTasks := s.st.Find([]FindOperator{query}); storageTasks != nil {
+	storageTasks := s.repository.GetByHash(task.hash)
+	if len(storageTasks) > 0 {
 		for _, v := range storageTasks {
-			if slices.Equal(v.request, t.request) {
+			if slices.Equal(v.request, task.request) {
 				return v.uuid, nil
 			}
 		}
 	}
 
 	select {
-	case s.taskQueue <- t:
-		return t.uuid, nil
+	case s.taskQueue <- task:
+		return task.uuid, nil
 	default:
 		return "", fmt.Errorf("scheduler pool is full")
 	}
 }
 
 func (s *Scheduler) GetTask(uuid UUID) Task {
-	return s.st.Get(uuid)
+	return s.repository.GetByUUID(uuid)
 }
 
 func (s *Scheduler) Close() {
 	close(s.taskQueue)
+	s.wg.Wait()
 }
 
-// Генератор UUID
-func newUUID() UUID {
+func generateUUID() UUID {
 	// pseudo uuid
 	b := make([]byte, 16)
 	_, err := rand.Read(b)
 	if err != nil {
-		return "d97976cc-35f8-44cb-91f9-fa47a85db34b"
+		return ""
 	}
 
 	uuid := fmt.Sprintf("%X-%X-%X-%X-%X", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
@@ -155,10 +141,10 @@ func newUUID() UUID {
 	return UUID(uuid)
 }
 
-func generateHash(request []byte) string {
+func generateHash(request []byte) Hash {
 	h := sha256.New()
 
 	h.Write(request)
 
-	return base64.URLEncoding.EncodeToString(h.Sum(nil))
+	return Hash(base64.URLEncoding.EncodeToString(h.Sum(nil)))
 }
