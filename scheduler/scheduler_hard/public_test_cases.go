@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"slices"
+	"sync"
 	"time"
 )
 
@@ -176,15 +177,6 @@ func (s *Scheduler) isClosed() bool {
 	}
 }
 
-func (s *Scheduler) isEmptyTaskQueue() bool {
-	select {
-	case <-s.taskQueue:
-		return false
-	default:
-		return true
-	}
-}
-
 // mockers
 
 // Processor
@@ -223,11 +215,16 @@ type MockRepository interface {
 }
 
 type mockrepository struct {
-	tasks map[UUID]Task
+	mutexTasks sync.RWMutex
+	tasks      map[UUID]Task
 }
 
 func (m *mockrepository) Store(t Task) UUID {
+	m.mutexTasks.Lock()
+	defer m.mutexTasks.Unlock()
+
 	m.tasks[t.uuid] = t
+
 	return t.uuid
 }
 
@@ -247,7 +244,9 @@ func (m *mockrepository) GetByUUID(uuid UUID) Task {
 	if uuid == "" {
 		return Task{}
 	}
+	m.mutexTasks.RLock()
 	val, ok := m.tasks[uuid]
+	m.mutexTasks.RUnlock()
 	if !ok {
 		return Task{}
 	}
