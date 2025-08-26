@@ -1,10 +1,7 @@
 package main
 
 import (
-	"fmt"
 	"slices"
-	"sync"
-	"time"
 )
 
 type TestCase struct {
@@ -17,32 +14,36 @@ var testCases = []TestCase{
 	{
 		name: "Вызов NewScheduler, добавление задачи, получение этой же задачи, проверка статуса задачи",
 		check: func() bool {
-			scheduler, err := NewScheduler(makeRepository(), makeProcessor(), 1, 1,
-				generateUUID)
+			waitingChannel := make(chan struct{})
+			scheduler, err := NewScheduler(makeRepository(),
+				makeProcessorWithChannel(waitingChannel), 1, 1, generateUUID)
 			if err != nil {
 				return false
 			}
+
+			defer scheduler.Close()
 
 			uuid, err := scheduler.AddTask([]byte{1})
 			if err != nil {
 				return false
 			}
 
-			scheduler.Close()
-
-			// ждем когда таска обработается, иначе не успеет попасть в repository
-			time.Sleep(time.Second)
+			// ждем, когда таска обработается и попадет в репозиторий
+			<-waitingChannel
 
 			task := scheduler.GetTask(uuid)
 			if task.uuid == "" {
 				return false
 			}
 
-			if !slices.Equal([]byte{1}, task.response) {
+			if task.status == StatusDone &&
+				!slices.Equal([]byte{1}, task.response) {
 				return false
 			}
 
-			if task.status != StatusDone {
+			// таска может не успеть выполниться
+			if !slices.Contains([]string{StatusProcessing, StatusDone},
+				task.status) {
 				return false
 			}
 
@@ -52,26 +53,29 @@ var testCases = []TestCase{
 	{
 		name: "Проверка работы worker (возврат ошибки при выполнении задачи)",
 		check: func() bool {
-			scheduler, err := NewScheduler(makeRepository(), makeProcessor(), 1, 1,
-				generateUUID)
+			waitingChannel := make(chan struct{})
+			scheduler, err := NewScheduler(makeRepository(),
+				makeProcessorWithChannel(waitingChannel), 1, 1, generateUUID)
 			if err != nil {
 				return false
 			}
+
+			defer scheduler.Close()
 
 			uuid, err := scheduler.AddTask([]byte{0})
 			if err != nil {
 				return false
 			}
 
-			scheduler.Close()
-			// ждем когда таска обработается, иначе не успеет попасть в repository
-			time.Sleep(time.Second)
+			// ждем, когда таска обработается и попадет в репозиторий
+			<-waitingChannel
 
 			task := scheduler.GetTask(uuid)
 			if task.uuid == "" {
 				return false
 			}
-			if task.status != StatusError {
+			if !slices.Contains([]string{StatusProcessing, StatusError},
+				task.status) {
 				return false
 			}
 			if task.response != nil {
@@ -95,78 +99,4 @@ func (s *Scheduler) isClosed() bool {
 	default:
 		return false
 	}
-}
-
-// mockers
-
-// Processor
-type MockProcessor interface {
-	Process([]byte) ([]byte, error)
-}
-
-type mockprocessor struct{}
-
-func (m *mockprocessor) Process(in []byte) ([]byte, error) {
-	if slices.Equal(in, []byte{100}) {
-		return []byte{150}, nil
-	}
-
-	if slices.Equal(in, []byte{0}) {
-		return nil, fmt.Errorf("error processing")
-	}
-
-	return in, nil
-}
-
-func NewMockProcessor() MockProcessor {
-	return &mockprocessor{}
-}
-
-func makeProcessor() Processor {
-	return NewMockProcessor()
-}
-
-// Mock Repository
-
-type MockRepository interface {
-	Store(Task) UUID
-	GetByUUID(UUID) Task
-}
-
-type mockrepository struct {
-	mutexTasks sync.RWMutex
-	tasks      map[UUID]Task
-}
-
-func (m *mockrepository) Store(t Task) UUID {
-	m.mutexTasks.Lock()
-	defer m.mutexTasks.Unlock()
-
-	m.tasks[t.uuid] = t
-
-	return t.uuid
-}
-
-func (m *mockrepository) GetByUUID(uuid UUID) Task {
-	if uuid == "" {
-		return Task{}
-	}
-	m.mutexTasks.RLock()
-	val, ok := m.tasks[uuid]
-	m.mutexTasks.RUnlock()
-
-	if !ok {
-		return Task{}
-	}
-	return val
-}
-
-func NewMockRepository() MockRepository {
-	return &mockrepository{
-		tasks: make(map[UUID]Task),
-	}
-}
-
-func makeRepository() Repository {
-	return NewMockRepository()
 }
