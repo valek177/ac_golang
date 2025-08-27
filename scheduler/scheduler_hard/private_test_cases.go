@@ -1,60 +1,55 @@
 package main
 
-import (
-	"fmt"
-	"slices"
-	"time"
-)
-
 var privateTestCases = []TestCase{
 	{
-		name: "GetTask возвращает непустую таску",
+		name: "Множество задач исполняются параллельно",
 		check: func() bool {
-			scheduler, err := NewScheduler(makeRepository(), makeProcessor(), 1, 2,
-				generateUUID, generateHash)
-			if err != nil {
-				return false
-			}
+			parallelTasksCount := 10
+			processorChannel := make(chan struct{}, parallelTasksCount)
+			repoChan := make(chan struct{}, parallelTasksCount)
 
-			uuid, err := scheduler.AddTask([]byte{1})
-			if uuid == "" {
-				return false
-			}
-
-			return true
-		},
-	},
-	{
-		name: "2 задачи исполняются параллельно",
-		check: func() bool {
-			scheduler, err := NewScheduler(makeRepository(), makeLongProcessor(), 2, 2,
+			scheduler, err := NewScheduler(makeRepositoryWithChannel(repoChan),
+				makeLongProcessor(processorChannel), parallelTasksCount, 50,
 				generateUUID, generateHash)
 			if err != nil {
 				return false
 			}
 			defer scheduler.Close()
 
-			uuid, err := scheduler.AddTask([]byte{1})
-			if uuid == "" || err != nil {
-				return false
+			defer func() {
+				for range parallelTasksCount {
+					// отправляем таски дальше на обработку в process
+					processorChannel <- struct{}{}
+				}
+			}()
+
+			checkUUIDs := make([]UUID, parallelTasksCount)
+
+			for i := 1; i <= parallelTasksCount; i++ {
+				uuid, err := scheduler.AddTask([]byte{byte(i)})
+				if uuid == "" || err != nil {
+					return false
+				}
+
+				checkUUIDs = append(checkUUIDs, uuid)
 			}
 
-			uuid2, err := scheduler.AddTask([]byte{2})
-			if uuid2 == "" || err != nil {
-				return false
+			for i := 0; i < parallelTasksCount; i++ {
+				// нужно дождаться сохранения состояния таски в статусе Processing
+				<-repoChan
+			}
+			countProcessedTasks := 0
+			for _, uuid := range checkUUIDs {
+				// смотрим состояние тасок
+				// должны выполняться только workers count тасок
+				task := scheduler.GetTask(uuid)
+
+				if task.status == StatusProcessing {
+					countProcessedTasks++
+				}
 			}
 
-			// Чтобы таски успели поместиться в workerы,
-			// но не успели выполниться (статус Processing)
-			time.Sleep(time.Millisecond * 100)
-
-			task := scheduler.GetTask(uuid)
-			if task.status != StatusProcessing {
-				return false
-			}
-
-			task2 := scheduler.GetTask(uuid2)
-			if task2.status != StatusProcessing {
+			if countProcessedTasks > parallelTasksCount {
 				return false
 			}
 
@@ -64,8 +59,8 @@ var privateTestCases = []TestCase{
 	{
 		name: "Превышение размера очереди при добавлении задачи (AddTask)",
 		check: func() bool {
-			scheduler, err := NewScheduler(makeRepository(), makeProcessor(), 1, 1,
-				generateUUID, generateHash)
+			scheduler, err := NewScheduler(makeRepository(), makeProcessor(),
+				1, 1, generateUUID, generateHash)
 			if err != nil {
 				return false
 			}
@@ -98,7 +93,7 @@ var privateTestCases = []TestCase{
 	{
 		name: "Вызов Close",
 		check: func() bool {
-			scheduler, err := NewScheduler(makeRepository(), makeProcessor(), 1, 2,
+			scheduler, err := NewScheduler(makeRepository(), makeProcessor(), 1, 1,
 				generateUUID, generateHash)
 			if err != nil {
 				return false
@@ -109,34 +104,4 @@ var privateTestCases = []TestCase{
 			return scheduler.isClosed()
 		},
 	},
-}
-
-// Mock Long Processor
-type MockLongProcessor interface {
-	Process([]byte) ([]byte, error)
-}
-
-type mocklongprocessor struct{}
-
-func (m *mocklongprocessor) Process(in []byte) ([]byte, error) {
-	// simulate long processing
-	time.Sleep(time.Second)
-
-	if slices.Equal(in, []byte{100}) {
-		return []byte{150}, nil
-	}
-
-	if slices.Equal(in, []byte{0}) {
-		return nil, fmt.Errorf("error processing")
-	}
-
-	return in, nil
-}
-
-func NewMockLongProcessor() MockLongProcessor {
-	return &mocklongprocessor{}
-}
-
-func makeLongProcessor() Processor {
-	return NewMockLongProcessor()
 }
