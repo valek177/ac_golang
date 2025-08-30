@@ -4,8 +4,6 @@ package main
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
 	"fmt"
 )
 
@@ -21,7 +19,6 @@ type (
 type Repository interface {
 	Store(Task) UUID
 	GetByUUID(UUID) Task
-	GetByHash(hash Hash) []Task
 }
 
 type Task struct {
@@ -40,7 +37,7 @@ type Scheduler struct {
 }
 
 // TODO scheduler methods
-func NewScheduler(repository Repository, processor Processor, numWorkers, queueSize int, generateUUID func() UUID, generateHash func(request []byte) Hash) (*Scheduler, error) {
+func NewScheduler(repository Repository, processor Processor, numWorkers, queueSize int, generateUUID func() UUID) (*Scheduler, error) {
 	// TODO
 	return nil, nil
 }
@@ -75,13 +72,4 @@ func generateUUID() UUID {
 	uuid := fmt.Sprintf("%X-%X-%X-%X-%X", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
 
 	return UUID(uuid)
-}
-
-// Для генерации хэша можно использовать готовую функцию
-func generateHash(request []byte) Hash {
-	h := sha256.New()
-
-	h.Write(request)
-
-	return Hash(base64.URLEncoding.EncodeToString(h.Sum(nil)))
 }
