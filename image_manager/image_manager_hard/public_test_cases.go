@@ -7,10 +7,5 @@ type TestCase struct {
 
 var testCases = []TestCase{
 	// Публичные тесткейсы
-	{
-		name: "Вызов",
-		check: func() bool {
-			return true
-		},
-	},
+
 }

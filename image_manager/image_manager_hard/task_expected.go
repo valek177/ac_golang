@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"net/http"
 	urllib "net/url"
 )
@@ -35,8 +36,8 @@ type ImageManagerServiceHandler interface {
 }
 
 type ImageManagerService struct {
-	adapterStorage *ImageStorage
-	adapterDB      *ImageURLDatabase
+	adapterStorage ImageStorageAdapter
+	adapterDB      ImageURLDatabaseAdapter
 }
 
 // Адаптер для взаимодействия с хранилищем картинок
@@ -45,19 +46,15 @@ type ImageStorageAdapter interface {
 	GetImageByID(id string) ([]byte, error)
 }
 
-type ImageStorage struct{}
-
 // Адаптер для взаимодействия с бд картинок
 type ImageURLDatabaseAdapter interface {
 	// TODO реализовать только методы
 	GetImageStatus(id string) (string, error)
-	UpdateImage(id string, status string)
+	UpdateImage(id string, status string) error
 }
 
-type ImageURLDatabase struct{}
-
-func NewImageManagerServiceHandler(imageStorageAdapter *ImageStorage,
-	adapterDB *ImageURLDatabase,
+func NewImageManagerServiceHandler(imageStorageAdapter ImageStorageAdapter,
+	adapterDB ImageURLDatabaseAdapter,
 ) (*ImageManagerService, error) {
 	return &ImageManagerService{
 		adapterStorage: imageStorageAdapter,
@@ -92,7 +89,6 @@ func (s *ImageManagerService) UploadImage(url string) (string, error) {
 		}
 	}
 
-	// начинаем транзакцию--->
 	err = s.adapterDB.UpdateImage(id, StatusUploading)
 	if err != nil {
 		return id, &customError{
@@ -101,7 +97,7 @@ func (s *ImageManagerService) UploadImage(url string) (string, error) {
 		}
 	}
 
-	data, err := GetDataFromURL(url)
+	data, err := getDataFromURL(url)
 	if err != nil {
 		s.adapterDB.UpdateImage(id, StatusError)
 		return "", &customError{
@@ -109,8 +105,6 @@ func (s *ImageManagerService) UploadImage(url string) (string, error) {
 			StatusCode: http.StatusInternalServerError,
 		}
 	}
-
-	// заканчиваем транзакцию
 
 	err = s.adapterStorage.UploadImage(id, data)
 	if err != nil {
@@ -131,23 +125,6 @@ func (s *ImageManagerService) UploadImage(url string) (string, error) {
 	return id, nil
 }
 
-// TODO mockers
-func (db *ImageURLDatabase) GetImageStatus(id string) (string, error) {
-	return "", nil
-}
-
-func (db *ImageURLDatabase) UpdateImage(id string, status string) error {
-	return nil
-}
-
-func (st *ImageStorage) UploadImage(id string, data []byte) error {
-	return nil
-}
-
-func (st *ImageStorage) GetImageByID(id string) ([]byte, error) {
-	return nil, nil
-}
-
 // можем предложить как готовую функцию
 func generateIdFromUrl(url string) string {
 	hasher := sha256.New()
@@ -165,19 +142,18 @@ func isUrlValid(url string) bool {
 	return true
 }
 
-func GetDataFromURL(url string) ([]byte, error) {
-	return nil, nil
+// можем предложить как готовую функцию
+func getDataFromURL(url string) ([]byte, error) {
+	response, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+
+	bodyBytes, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return bodyBytes, nil
 }
-
-// func main() {
-// 	imgStorage := NewSt
-// 	service := NewImageManagerServiceHandler()
-// 	// Register a handler for the root path
-// 	http.HandleFunc("/upload", func(w http.ResponseWriter, r *http.Request) {
-// 		fmt.Fprintf(w, "Hello from Go's HTTP server!")
-// 	})
-
-// 	// Start the server on port 8080
-// 	fmt.Println("Server listening on :8085")
-// 	log.Fatal(http.ListenAndServe(":8085", nil))
-// }
