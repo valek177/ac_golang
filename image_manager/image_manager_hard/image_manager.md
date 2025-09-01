@@ -10,6 +10,9 @@
 - в случае ошибок, связанных с конфликтующими параллельными запросами, хотим возвращать 409 (conflict)
 - в случае ошибок обработки на стороне сервера, хотим возвращать 500 (internal server error)
 
+Допустимо использовать библиотеки:
+1. "net/url" - для валидации URL
+
 
 # Начальный шаблон
 
@@ -31,5 +34,12 @@ type ImageStorageAdapter interface {
 // Адаптер для взаимодействия с БД картинок
 type ImageURLDatabaseAdapter interface {
 	// TODO только методы
+}
+
+func NewImageManagerServiceHandler(imageStorageAdapter ImageStorageAdapter,
+	adapterDB ImageURLDatabaseAdapter, generateIdFromURL func(url string) string,
+	dataFromURL URLData,
+) (*ImageManagerService, error) {
+	//TODO
 }
 ```

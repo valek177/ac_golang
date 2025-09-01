@@ -1,12 +1,9 @@
 package main
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
+	"context"
 	"fmt"
-	"io"
 	"net/http"
-	urllib "net/url"
 )
 
 var (
@@ -15,15 +12,6 @@ var (
 	ErrAlreadyUploadingImg = fmt.Errorf("already uploading")
 )
 
-type customError struct {
-	Message    string
-	StatusCode int
-}
-
-func (e *customError) Error() string {
-	return e.Message
-}
-
 // Image статусы
 const (
 	StatusUploaded  = "uploaded"
@@ -31,129 +19,83 @@ const (
 	StatusError     = "error"
 )
 
+type URLData interface {
+	Get(url string) http.Response
+	GetBody(response http.Response) []byte
+}
+
 type ImageManagerServiceHandler interface {
 	UploadImage(url string) (string, error)
 }
 
 type ImageManagerService struct {
-	adapterStorage ImageStorageAdapter
-	adapterDB      ImageURLDatabaseAdapter
+	adapterStorage    ImageStorageAdapter
+	adapterDB         ImageURLDatabaseAdapter
+	generateIdFromURL func(url string) string
+	urlData           URLData
 }
 
 // Адаптер для взаимодействия с хранилищем картинок
 type ImageStorageAdapter interface {
-	UploadImage(id string, data []byte) error
-	GetImageByID(id string) ([]byte, error)
+	UploadImage(ctx context.Context, id string, data []byte) error
+	GetImageByID(ctx context.Context, id string) ([]byte, error)
 }
 
 // Адаптер для взаимодействия с бд картинок
 type ImageURLDatabaseAdapter interface {
 	// TODO реализовать только методы
-	GetImageStatus(id string) (string, error)
-	UpdateImage(id string, status string) error
+	UpdateImage(ctx context.Context, id string, status string) error
+	PutImage(ctx context.Context, id string, url string) error
+	GetImage(ctx context.Context, id string) (url, status string, err error)
 }
 
 func NewImageManagerServiceHandler(imageStorageAdapter ImageStorageAdapter,
-	adapterDB ImageURLDatabaseAdapter,
+	adapterDB ImageURLDatabaseAdapter, generateIdFromURL func(url string) string,
+	urlData URLData,
 ) (*ImageManagerService, error) {
 	return &ImageManagerService{
-		adapterStorage: imageStorageAdapter,
-		adapterDB:      adapterDB,
+		adapterStorage:    imageStorageAdapter,
+		adapterDB:         adapterDB,
+		generateIdFromURL: generateIdFromURL,
+		urlData:           urlData,
 	}, nil
 }
 
-func (s *ImageManagerService) UploadImage(url string) (string, error) {
+func (s *ImageManagerService) UploadImage(ctx context.Context, url string) (string, error) {
 	if !isUrlValid(url) {
-		return "", &customError{
-			Message:    ErrInvalidURL.Error(),
-			StatusCode: http.StatusBadRequest,
-		}
+		return "", ErrInvalidURL
 	}
 	id := generateIdFromUrl(url)
 
-	status, err := s.adapterDB.GetImageStatus(id)
+	err := s.adapterDB.PutImage(ctx, id, url)
 	if err != nil {
-		return "", &customError{
-			Message:    ErrInternalServer.Error(),
-			StatusCode: http.StatusInternalServerError,
+		_, status, err := s.adapterDB.GetImage(ctx, id)
+		switch status {
+		case StatusUploaded:
+			return id, nil
+		case StatusUploading:
+			return id, ErrAlreadyUploadingImg
 		}
-	}
-	if status == StatusUploaded {
-		return id, nil
-	}
 
-	if status == StatusUploading {
-		return id, &customError{
-			Message:    ErrAlreadyUploadingImg.Error(),
-			StatusCode: http.StatusConflict,
-		}
-	}
-
-	err = s.adapterDB.UpdateImage(id, StatusUploading)
-	if err != nil {
-		return id, &customError{
-			Message:    ErrInternalServer.Error(),
-			StatusCode: http.StatusInternalServerError,
+		if err != nil {
+			return id, ErrInternalServer
 		}
 	}
 
 	data, err := getDataFromURL(url)
 	if err != nil {
-		s.adapterDB.UpdateImage(id, StatusError)
-		return "", &customError{
-			Message:    ErrInternalServer.Error(),
-			StatusCode: http.StatusInternalServerError,
-		}
+		return "", ErrInternalServer
 	}
 
-	err = s.adapterStorage.UploadImage(id, data)
+	err = s.adapterStorage.UploadImage(ctx, id, data)
 	if err != nil {
-		return "", &customError{
-			Message:    ErrInternalServer.Error(),
-			StatusCode: http.StatusInternalServerError,
-		}
+		return "", ErrInternalServer
 	}
 
-	err = s.adapterDB.UpdateImage(id, StatusUploaded)
+	err = s.adapterDB.UpdateImage(ctx, id, StatusUploaded)
 	if err != nil {
-		return "", &customError{
-			Message:    ErrInternalServer.Error(),
-			StatusCode: http.StatusInternalServerError,
-		}
+		return "", ErrInternalServer
 	}
 
 	return id, nil
-}
-
-// можем предложить как готовую функцию
-func generateIdFromUrl(url string) string {
-	hasher := sha256.New()
-	hasher.Write([]byte(url))
-	return hex.EncodeToString(hasher.Sum(nil))
-}
-
-// можем предложить как готовую функцию
-func isUrlValid(url string) bool {
-	_, err := urllib.ParseRequestURI(url)
-	if err != nil {
-		return false
-	}
-
-	return true
-}
-
-// можем предложить как готовую функцию
-func getDataFromURL(url string) ([]byte, error) {
-	response, err := http.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer response.Body.Close()
-
-	bodyBytes, err := io.ReadAll(response.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	return bodyBytes, nil
 }
