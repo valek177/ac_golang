@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 )
@@ -26,8 +27,8 @@ type ImageManagerServiceHandler interface {
 
 // Адаптер для взаимодействия с хранилищем картинок
 type ImageStorageAdapter interface {
-	UploadImage(id string, data []byte) error
-	GetImageByID(id string) ([]byte, error)
+	UploadImage(ctx context.Context, id string, data []byte) error
+	GetImageByID(ctx context.Context, id string) ([]byte, error)
 }
 
 // Адаптер для взаимодействия с БД картинок
