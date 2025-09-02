@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 )
 
 type MockImageURLDatabaseAdapter interface {
@@ -32,11 +33,16 @@ func (db *mockimageurldatabaseadapter) GetImage(ctx context.Context, id string) 
 func (db *mockimageurldatabaseadapter) UpdateImage(ctx context.Context, id, status string) error {
 	if id == generateIdFromUrl(uploadingImgErrorURL) {
 		return fmt.Errorf("unable to get image status")
+	} else if id == generateIdFromUrl(uploadedImgUpdStatusErrURL) {
+		return fmt.Errorf("unable to update image status")
 	}
 	return nil
 }
 
 func (db *mockimageurldatabaseadapter) PutImage(ctx context.Context, id, url string) error {
+	if url == uploadingImgURL || url == uploadedImgURL {
+		return fmt.Errorf("already exists in database")
+	}
 	return nil
 }
 
@@ -57,6 +63,9 @@ type MockImageStorageAdapter interface {
 type mockimagestorageadapter struct{}
 
 func (st *mockimagestorageadapter) UploadImage(ctx context.Context, id string, data []byte) error {
+	if id == generateIdFromUrl(uploadingImgToStorageErrURL) {
+		return fmt.Errorf("unable to upload image")
+	}
 	return nil
 }
 
@@ -70,4 +79,35 @@ func NewMockImageStorageAdapter() MockImageStorageAdapter {
 
 func makeImageStorageAdapter() ImageStorageAdapter {
 	return NewMockImageStorageAdapter()
+}
+
+// URLData
+
+type MockURLData interface {
+	Get(url string) http.Response
+	GetBody(response http.Response) ([]byte, error)
+}
+
+type mockurldata struct{}
+
+func (m *mockurldata) Get(url string) http.Response {
+	if url == uploadingImgErrorURL {
+		return http.Response{StatusCode: 400}
+	}
+	return http.Response{}
+}
+
+func (m *mockurldata) GetBody(response http.Response) ([]byte, error) {
+	if response.StatusCode == 400 {
+		return nil, fmt.Errorf("unable to get image")
+	}
+	return []byte{1}, nil
+}
+
+func NewMockURLData() MockURLData {
+	return &mockurldata{}
+}
+
+func makeMockURLData() URLData {
+	return NewMockURLData()
 }

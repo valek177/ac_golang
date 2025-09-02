@@ -21,7 +21,7 @@ const (
 
 type URLData interface {
 	Get(url string) http.Response
-	GetBody(response http.Response) []byte
+	GetBody(response http.Response) ([]byte, error)
 }
 
 type ImageManagerServiceHandler interface {
@@ -82,19 +82,19 @@ func (s *ImageManagerService) UploadImage(ctx context.Context, url string) (stri
 		}
 	}
 
-	data, err := getDataFromURL(url)
+	data, err := s.urlData.GetBody(s.urlData.Get(url))
 	if err != nil {
-		return "", ErrInternalServer
+		return id, ErrInternalServer
 	}
 
 	err = s.adapterStorage.UploadImage(ctx, id, data)
 	if err != nil {
-		return "", ErrInternalServer
+		return id, ErrInternalServer
 	}
 
 	err = s.adapterDB.UpdateImage(ctx, id, StatusUploaded)
 	if err != nil {
-		return "", ErrInternalServer
+		return id, ErrInternalServer
 	}
 
 	return id, nil

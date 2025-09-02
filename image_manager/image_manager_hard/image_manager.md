@@ -11,13 +11,33 @@
 - в случае ошибок обработки на стороне сервера, хотим возвращать 500 (internal server error)
 
 Допустимо использовать библиотеки:
-1. "net/url" - для валидации URL
+- "net/http" - для работы с http
+- "net/url" - для валидации URL
 
 
 # Начальный шаблон
 
 ```
 package main
+
+import (
+	"fmt"
+	"net/http"
+	"net/url"
+)
+
+var (
+	ErrInvalidURL          = fmt.Errorf("invalid url")
+	ErrInternalServer      = fmt.Errorf("internal server error")
+	ErrAlreadyUploadingImg = fmt.Errorf("already uploading")
+)
+
+// Image статусы
+const (
+	StatusUploaded  = "uploaded"
+	StatusUploading = "uploading"
+	StatusError     = "error"
+)
 
 // Сигнатура нашего сервиса
 type ImageManagerServiceHandler interface {
@@ -36,10 +56,15 @@ type ImageURLDatabaseAdapter interface {
 	// TODO только методы
 }
 
+type URLData interface {
+	Get(url string) http.Response
+	GetBody(response http.Response) ([]byte, error)
+}
+
 func NewImageManagerServiceHandler(imageStorageAdapter ImageStorageAdapter,
 	adapterDB ImageURLDatabaseAdapter, generateIdFromURL func(url string) string,
-	dataFromURL URLData,
+	urlData URLData,
 ) (*ImageManagerService, error) {
-	//TODO
+	// TODO
 }
 ```
