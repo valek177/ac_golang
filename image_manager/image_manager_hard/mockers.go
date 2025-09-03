@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/http"
 )
 
 type MockImageURLDatabaseAdapter interface {
@@ -84,21 +83,13 @@ func makeImageStorageAdapter() ImageStorageAdapter {
 // URLData
 
 type MockURLData interface {
-	Get(url string) http.Response
-	GetBody(response http.Response) ([]byte, error)
+	Get(url string) ([]byte, error)
 }
 
 type mockurldata struct{}
 
-func (m *mockurldata) Get(url string) http.Response {
+func (m *mockurldata) Get(url string) ([]byte, error) {
 	if url == uploadingImgErrorURL {
-		return http.Response{StatusCode: 400}
-	}
-	return http.Response{}
-}
-
-func (m *mockurldata) GetBody(response http.Response) ([]byte, error) {
-	if response.StatusCode == 400 {
 		return nil, fmt.Errorf("unable to get image")
 	}
 	return []byte{1}, nil

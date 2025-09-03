@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/http"
 )
 
 var (
@@ -20,12 +19,11 @@ const (
 )
 
 type URLData interface {
-	Get(url string) http.Response
-	GetBody(response http.Response) ([]byte, error)
+	Get(url string) ([]byte, error)
 }
 
 type ImageManagerServiceHandler interface {
-	UploadImage(url string) (string, error)
+	UploadImage(ctx context.Context, url string) (string, error)
 }
 
 type ImageManagerService struct {
@@ -52,7 +50,7 @@ type ImageURLDatabaseAdapter interface {
 func NewImageManagerServiceHandler(imageStorageAdapter ImageStorageAdapter,
 	adapterDB ImageURLDatabaseAdapter, generateIdFromURL func(url string) string,
 	urlData URLData,
-) (*ImageManagerService, error) {
+) (ImageManagerServiceHandler, error) {
 	return &ImageManagerService{
 		adapterStorage:    imageStorageAdapter,
 		adapterDB:         adapterDB,
@@ -82,7 +80,7 @@ func (s *ImageManagerService) UploadImage(ctx context.Context, url string) (stri
 		}
 	}
 
-	data, err := s.urlData.GetBody(s.urlData.Get(url))
+	data, err := s.urlData.Get(url)
 	if err != nil {
 		return id, ErrInternalServer
 	}

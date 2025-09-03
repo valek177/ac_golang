@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/http"
 )
 
 var (
@@ -22,7 +21,7 @@ const (
 // Сигнатура нашего сервиса
 type ImageManagerServiceHandler interface {
 	// TODO: реализовать
-	UploadImage(url string) (string, error)
+	UploadImage(ctx context.Context, url string) (string, error)
 }
 
 // Адаптер для взаимодействия с хранилищем картинок
@@ -37,13 +36,12 @@ type ImageURLDatabaseAdapter interface {
 }
 
 type URLData interface {
-	Get(url string) http.Response
-	GetBody(response http.Response) ([]byte, error)
+	Get(url string) ([]byte, error)
 }
 
 func NewImageManagerServiceHandler(imageStorageAdapter ImageStorageAdapter,
 	adapterDB ImageURLDatabaseAdapter, generateIdFromURL func(url string) string,
 	urlData URLData,
-) (*ImageManagerService, error) {
+) (ImageManagerServiceHandler, error) {
 	// TODO
 }
