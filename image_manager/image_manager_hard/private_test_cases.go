@@ -13,7 +13,7 @@ var privateTestCases = []TestCase{
 		check: func() bool {
 			ctx := context.TODO()
 			imgManager, err := NewImageManagerServiceHandler(makeImageStorageAdapter(),
-				makeImageURLDatabaseAdapter(), generateIdFromUrl, makeMockURLData())
+				makeImageURLDatabaseAdapter(), generateIdFromUrl, makeMockHTTPClient())
 
 			_, err = imgManager.UploadImage(ctx, errorURL)
 			if err == nil {
@@ -32,7 +32,7 @@ var privateTestCases = []TestCase{
 		check: func() bool {
 			ctx := context.TODO()
 			imgManager, err := NewImageManagerServiceHandler(makeImageStorageAdapter(),
-				makeImageURLDatabaseAdapter(), generateIdFromUrl, makeMockURLData())
+				makeImageURLDatabaseAdapter(), generateIdFromUrl, makeMockHTTPClient())
 
 			id, err := imgManager.UploadImage(ctx, uploadedImgURL)
 			if err != nil {
@@ -51,7 +51,7 @@ var privateTestCases = []TestCase{
 		check: func() bool {
 			ctx := context.TODO()
 			imgManager, err := NewImageManagerServiceHandler(makeImageStorageAdapter(),
-				makeImageURLDatabaseAdapter(), generateIdFromUrl, makeMockURLData())
+				makeImageURLDatabaseAdapter(), generateIdFromUrl, makeMockHTTPClient())
 
 			id, err := imgManager.UploadImage(ctx, uploadingImgURL)
 			if err == nil {
@@ -74,7 +74,7 @@ var privateTestCases = []TestCase{
 		check: func() bool {
 			ctx := context.TODO()
 			imgManager, err := NewImageManagerServiceHandler(makeImageStorageAdapter(),
-				makeImageURLDatabaseAdapter(), generateIdFromUrl, makeMockURLData())
+				makeImageURLDatabaseAdapter(), generateIdFromUrl, makeMockHTTPClient())
 
 			id, err := imgManager.UploadImage(ctx, uploadingImgErrorURL)
 			if err == nil {
@@ -97,7 +97,7 @@ var privateTestCases = []TestCase{
 		check: func() bool {
 			ctx := context.TODO()
 			imgManager, err := NewImageManagerServiceHandler(makeImageStorageAdapter(),
-				makeImageURLDatabaseAdapter(), generateIdFromUrl, makeMockURLData())
+				makeImageURLDatabaseAdapter(), generateIdFromUrl, makeMockHTTPClient())
 
 			id, err := imgManager.UploadImage(ctx, uploadingImgToStorageErrURL)
 			if err == nil {
@@ -120,7 +120,7 @@ var privateTestCases = []TestCase{
 		check: func() bool {
 			ctx := context.TODO()
 			imgManager, err := NewImageManagerServiceHandler(makeImageStorageAdapter(),
-				makeImageURLDatabaseAdapter(), generateIdFromUrl, makeMockURLData())
+				makeImageURLDatabaseAdapter(), generateIdFromUrl, makeMockHTTPClient())
 
 			id, err := imgManager.UploadImage(ctx, uploadedImgUpdStatusErrURL)
 			if err == nil {

@@ -18,7 +18,7 @@ const (
 	StatusError     = "error"
 )
 
-type URLData interface {
+type HTTPClient interface {
 	Get(url string) ([]byte, error)
 }
 
@@ -30,7 +30,7 @@ type ImageManagerService struct {
 	adapterStorage    ImageStorageAdapter
 	adapterDB         ImageURLDatabaseAdapter
 	generateIdFromURL func(url string) string
-	urlData           URLData
+	httpClient        HTTPClient
 }
 
 // Адаптер для взаимодействия с хранилищем картинок
@@ -49,13 +49,13 @@ type ImageURLDatabaseAdapter interface {
 
 func NewImageManagerServiceHandler(imageStorageAdapter ImageStorageAdapter,
 	adapterDB ImageURLDatabaseAdapter, generateIdFromURL func(url string) string,
-	urlData URLData,
+	httpClient HTTPClient,
 ) (ImageManagerServiceHandler, error) {
 	return &ImageManagerService{
 		adapterStorage:    imageStorageAdapter,
 		adapterDB:         adapterDB,
 		generateIdFromURL: generateIdFromURL,
-		urlData:           urlData,
+		httpClient:        httpClient,
 	}, nil
 }
 
@@ -80,7 +80,7 @@ func (s *ImageManagerService) UploadImage(ctx context.Context, url string) (stri
 		}
 	}
 
-	data, err := s.urlData.Get(url)
+	data, err := s.httpClient.Get(url)
 	if err != nil {
 		return id, ErrInternalServer
 	}

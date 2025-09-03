@@ -14,7 +14,7 @@ var testCases = []TestCase{
 		check: func() bool {
 			ctx := context.TODO()
 			imgManager, err := NewImageManagerServiceHandler(makeImageStorageAdapter(),
-				makeImageURLDatabaseAdapter(), generateIdFromUrl, makeMockURLData())
+				makeImageURLDatabaseAdapter(), generateIdFromUrl, makeMockHTTPClient())
 
 			id, err := imgManager.UploadImage(ctx, uploadImgOk)
 			if err != nil {

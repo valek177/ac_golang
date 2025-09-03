@@ -35,13 +35,13 @@ type ImageURLDatabaseAdapter interface {
 	// TODO только методы
 }
 
-type URLData interface {
+type HTTPClient interface {
 	Get(url string) ([]byte, error)
 }
 
 func NewImageManagerServiceHandler(imageStorageAdapter ImageStorageAdapter,
 	adapterDB ImageURLDatabaseAdapter, generateIdFromURL func(url string) string,
-	urlData URLData,
+	httpClient HTTPClient,
 ) (ImageManagerServiceHandler, error) {
 	// TODO
 }

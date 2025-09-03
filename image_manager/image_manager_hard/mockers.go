@@ -80,25 +80,25 @@ func makeImageStorageAdapter() ImageStorageAdapter {
 	return NewMockImageStorageAdapter()
 }
 
-// URLData
+// HTTPClient
 
-type MockURLData interface {
+type MockHTTPClient interface {
 	Get(url string) ([]byte, error)
 }
 
-type mockurldata struct{}
+type mockhttpclient struct{}
 
-func (m *mockurldata) Get(url string) ([]byte, error) {
+func (m *mockhttpclient) Get(url string) ([]byte, error) {
 	if url == uploadingImgErrorURL {
 		return nil, fmt.Errorf("unable to get image")
 	}
 	return []byte{1}, nil
 }
 
-func NewMockURLData() MockURLData {
-	return &mockurldata{}
+func NewMockHTTPClient() MockHTTPClient {
+	return &mockhttpclient{}
 }
 
-func makeMockURLData() URLData {
-	return NewMockURLData()
+func makeMockHTTPClient() HTTPClient {
+	return NewMockHTTPClient()
 }
