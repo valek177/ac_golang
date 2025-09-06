@@ -4,7 +4,7 @@ func main() {
 	tests := append(testCases, privateTestCases...)
 
 	for _, tt := range tests {
-		CustomTestBody(
+		ConcurrentCustomTestBody(
 			tt.name,
 			func() struct{} {
 				return struct{}{}

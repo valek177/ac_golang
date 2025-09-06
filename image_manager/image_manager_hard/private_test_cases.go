@@ -2,9 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	urllib "net/url"
 )
 
 var privateTestCases = []TestCase{
@@ -138,15 +135,4 @@ var privateTestCases = []TestCase{
 			return true
 		},
 	},
-}
-
-func generateIdFromUrl(url string) string {
-	hasher := sha256.New()
-	hasher.Write([]byte(url))
-	return hex.EncodeToString(hasher.Sum(nil))
-}
-
-func isUrlValid(url string) bool {
-	u, err := urllib.Parse(url)
-	return err == nil && u.Scheme != "" && u.Host != ""
 }
